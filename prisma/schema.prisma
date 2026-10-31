@@ -1,0 +1,159 @@
+// One schema for the whole Platform (ADR 0001).
+//
+// Tables are either:
+// - platform tables: no school_id, reached only through the platform client
+//   (server/platform/db.ts), or
+// - school-owned tables: school_id NOT NULL, protected by row-level security,
+//   reached only through forSchool() (server/database/school.ts).
+//
+// school_id on school-owned tables defaults to app_current_school(), so code
+// running inside forSchool() never has to pass it. References between
+// school-owned tables are composite (school_id, id) foreign keys, so a row can
+// never point at another School's row.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Locale {
+  so
+  en
+}
+
+enum SchoolStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum SchoolRole {
+  SCHOOL_ADMIN
+  REGISTRAR
+  ACCOUNTANT
+  TEACHER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+// ---------------------------------------------------------------------------
+// Platform tables
+// ---------------------------------------------------------------------------
+
+// An identity (CONTEXT.md). Shaped for Better Auth, which owns sign-in.
+// Phone-only identities get a placeholder email from the phone-number plugin.
+model User {
+  id                  String   @id
+  name                String
+  email               String   @unique
+  emailVerified       Boolean  @default(false) @map("email_verified")
+  image               String?
+  phoneNumber         String?  @unique @map("phone_number")
+  phoneNumberVerified Boolean  @default(false) @map("phone_number_verified")
+  preferredLocale     Locale   @default(so) @map("preferred_locale")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  memberships    SchoolMembership[]
+  platformAdmin  PlatformAdministrator?  @relation("admin")
+  grantedAdmins  PlatformAdministrator[] @relation("grantedBy")
+  createdSchools School[]
+
+  @@map("user")
+}
+
+// Platform privileges live here, never on a school role (ADR 0004). Kept out of
+// the user table so the auth library can never let a user grant it to themselves.
+model PlatformAdministrator {
+  userId      String   @id @map("user_id")
+  grantedById String?  @map("granted_by_id")
+  grantedAt   DateTime @default(now()) @map("granted_at")
+
+  user      User  @relation("admin", fields: [userId], references: [id])
+  grantedBy User? @relation("grantedBy", fields: [grantedById], references: [id])
+
+  @@map("platform_administrator")
+}
+
+model School {
+  id            String       @id @default(uuid(7)) @db.Uuid
+  name          String
+  slug          String       @unique
+  schoolCode    String       @unique @map("school_code")
+  status        SchoolStatus @default(ACTIVE)
+  defaultLocale Locale       @default(so) @map("default_locale")
+  timezone      String       @default("Africa/Mogadishu")
+  createdById   String       @map("created_by_id")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  createdBy   User               @relation(fields: [createdById], references: [id])
+  branches    Branch[]
+  memberships SchoolMembership[]
+
+  @@map("school")
+}
+
+// ---------------------------------------------------------------------------
+// School-owned tables (row-level security)
+// ---------------------------------------------------------------------------
+
+model Branch {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  schoolId  String   @default(dbgenerated("app_current_school()")) @map("school_id") @db.Uuid
+  code      String
+  nameSo    String   @map("name_so")
+  nameEn    String   @map("name_en")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  school             School             @relation(fields: [schoolId], references: [id])
+  membershipBranches MembershipBranch[]
+
+  @@unique([schoolId, id])
+  @@unique([schoolId, code])
+  @@map("branch")
+}
+
+// One person's access to one School, with exactly one role (ADR 0004).
+model SchoolMembership {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  schoolId    String           @default(dbgenerated("app_current_school()")) @map("school_id") @db.Uuid
+  userId      String           @map("user_id")
+  role        SchoolRole
+  status      MembershipStatus @default(INVITED)
+  invitedById String?          @map("invited_by_id")
+  activatedAt DateTime?        @map("activated_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  school   School             @relation(fields: [schoolId], references: [id])
+  user     User               @relation(fields: [userId], references: [id])
+  branches MembershipBranch[]
+
+  @@unique([userId, schoolId])
+  @@unique([schoolId, id])
+  @@map("school_membership")
+}
+
+// Branch scope: no rows means School-wide. SCHOOL_ADMIN always has none.
+model MembershipBranch {
+  schoolId     String @default(dbgenerated("app_current_school()")) @map("school_id") @db.Uuid
+  membershipId String @map("membership_id") @db.Uuid
+  branchId     String @map("branch_id") @db.Uuid
+
+  membership SchoolMembership @relation(fields: [schoolId, membershipId], references: [schoolId, id], onDelete: Cascade)
+  branch     Branch           @relation(fields: [schoolId, branchId], references: [schoolId, id])
+
+  @@id([membershipId, branchId])
+  @@map("membership_branch")
+}
