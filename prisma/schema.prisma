@@ -38,11 +38,23 @@ enum SchoolRole {
   TEACHER
 }
 
+// A membership exists only once its invitation is accepted, so there is no
+// INVITED status: pending access lives on Invitation.
 enum MembershipStatus {
-  INVITED
   ACTIVE
   SUSPENDED
   REVOKED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+}
+
+enum CodeChannel {
+  SMS
+  EMAIL
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +62,8 @@ enum MembershipStatus {
 // ---------------------------------------------------------------------------
 
 // An identity (CONTEXT.md). Shaped for Better Auth, which owns sign-in.
-// Phone-only identities get a placeholder email from the phone-number plugin.
+// Better Auth requires an email, so phone-only identities get a placeholder
+// ending in "@phone.invalid" (see server/auth/identity.ts). Never send to it.
 model User {
   id                  String   @id
   name                String
@@ -59,16 +72,136 @@ model User {
   image               String?
   phoneNumber         String?  @unique @map("phone_number")
   phoneNumberVerified Boolean  @default(false) @map("phone_number_verified")
+  twoFactorEnabled    Boolean  @default(false) @map("two_factor_enabled")
   preferredLocale     Locale   @default(so) @map("preferred_locale")
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  memberships    SchoolMembership[]
-  platformAdmin  PlatformAdministrator?  @relation("admin")
-  grantedAdmins  PlatformAdministrator[] @relation("grantedBy")
-  createdSchools School[]
+  sessions        Session[]
+  accounts        Account[]
+  twoFactors      TwoFactor[]
+  memberships     SchoolMembership[]
+  platformAdmin   PlatformAdministrator?  @relation("admin")
+  grantedAdmins   PlatformAdministrator[] @relation("grantedBy")
+  createdSchools  School[]
+  invitationsSent Invitation[]            @relation("invitedBy")
+  invitationsUsed Invitation[]            @relation("acceptedBy")
 
   @@map("user")
+}
+
+// Better Auth tables. Field names follow Better Auth; columns are snake_case.
+
+model Session {
+  id        String   @id
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  userId                String    @map("user_id")
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model TwoFactor {
+  id                      String    @id
+  userId                  String    @map("user_id")
+  secret                  String
+  backupCodes             String    @map("backup_codes")
+  verified                Boolean   @default(true)
+  failedVerificationCount Int       @default(0) @map("failed_verification_count")
+  lockedUntil             DateTime? @map("locked_until")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([secret])
+  @@map("two_factor")
+}
+
+model RateLimit {
+  id          String @id @default(uuid(7))
+  key         String @unique
+  count       Int
+  lastRequest BigInt @map("last_request")
+
+  @@map("rate_limit")
+}
+
+// An offer of a membership to a phone number or email address that may not
+// have an identity yet. Accepted automatically the first time that contact
+// signs in with a code (server/platform/invitations.ts).
+model Invitation {
+  id           String           @id @default(uuid(7)) @db.Uuid
+  schoolId     String           @map("school_id") @db.Uuid
+  phoneNumber  String?          @map("phone_number")
+  email        String?
+  inviteeName  String           @map("invitee_name")
+  role         SchoolRole
+  branchIds    String[]         @default([]) @map("branch_ids") @db.Uuid
+  status       InvitationStatus @default(PENDING)
+  invitedById  String?          @map("invited_by_id")
+  expiresAt    DateTime         @map("expires_at")
+  acceptedById String?          @map("accepted_by_id")
+  acceptedAt   DateTime?        @map("accepted_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  school     School @relation(fields: [schoolId], references: [id])
+  invitedBy  User?  @relation("invitedBy", fields: [invitedById], references: [id])
+  acceptedBy User?  @relation("acceptedBy", fields: [acceptedById], references: [id])
+
+  @@index([phoneNumber, status])
+  @@index([email, status])
+  @@map("invitation")
+}
+
+// Every sign-in code sent, for per-destination rate limits and cost tracking.
+model CodeSendLog {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  channel     CodeChannel
+  destination String
+  sentAt      DateTime    @default(now()) @map("sent_at")
+
+  @@index([destination, sentAt])
+  @@map("code_send_log")
 }
 
 // Platform privileges live here, never on a school role (ADR 0004). Kept out of
@@ -99,6 +232,7 @@ model School {
   createdBy   User               @relation(fields: [createdById], references: [id])
   branches    Branch[]
   memberships SchoolMembership[]
+  invitations Invitation[]
 
   @@map("school")
 }
@@ -130,7 +264,7 @@ model SchoolMembership {
   schoolId    String           @default(dbgenerated("app_current_school()")) @map("school_id") @db.Uuid
   userId      String           @map("user_id")
   role        SchoolRole
-  status      MembershipStatus @default(INVITED)
+  status      MembershipStatus @default(ACTIVE)
   invitedById String?          @map("invited_by_id")
   activatedAt DateTime?        @map("activated_at")
   createdAt   DateTime         @default(now()) @map("created_at")

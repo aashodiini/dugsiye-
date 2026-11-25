@@ -34,6 +34,9 @@ Each identity's choice of Somali (`so`) or English (`en`). Everything the user s
 **Bilingual name**
 A name a School enters in both Somali and English, both required. Used for subjects, class levels, sections, fee categories, and Branches. People's names and free text are not translated.
 
+**Invitation**
+An offer of one role, and a branch scope, at one School to a phone number or email address, which may not belong to anyone yet. It expires after 7 days. Nobody can get an identity without an invitation. The first time the invited contact signs in with a code, the invitation becomes an `ACTIVE` membership. A contact has at most one pending invitation per School.
+
 **Membership**
 One person's access to one School. It has exactly one **role** and a **branch scope** ([ADR 0004](docs/0004-one-role-per-membership.md)).
 

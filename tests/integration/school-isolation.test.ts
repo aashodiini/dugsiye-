@@ -130,7 +130,7 @@ describe("database setup", () => {
   it("does not give the app role access to platform tables", async () => {
     const grants = await platformDb().$queryRaw<{ table: string }[]>`
       SELECT DISTINCT table_name AS table FROM information_schema.role_table_grants
-      WHERE grantee = 'dugsiye_app' AND table_name IN ('school', 'user', 'platform_administrator')`;
+      WHERE grantee = 'dugsiye_app' AND table_name IN ('school', 'user', 'platform_administrator', 'session', 'account', 'verification', 'two_factor', 'rate_limit', 'code_send_log')`;
     expect(grants).toEqual([]);
   });
 });
