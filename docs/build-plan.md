@@ -25,16 +25,25 @@ Release 1 is built as one vertical slice at a time. Each step ends with passing 
   - `server/platform/invitations.ts`: `createInvitation`, `acceptPendingInvitations`.
   - Route `app/api/auth/[...all]/route.ts`.
 
+- **Step 2b (language and sign-in screens) is done**, with 37 tests passing, a clean production build, and an HTTP smoke test (seeded invite → code → session → home page in Somali, then in English):
+  - `i18n/`: `so` and `en` message catalogues (a test keeps their keys and placeholders identical), `format()`, and the `dugsiye_locale` cookie.
+  - `server/i18n/locale.ts` (`getLocale`, `getMessages`) and `server/auth/session.ts` (`getCurrentIdentity`, `requireIdentity`).
+  - `app/sign-in/`: phone or email, then code. `app/page.tsx`: your Schools and roles, language switcher, sign-out. `app/actions/locale.ts`: `setLanguage`, `syncLocaleCookie`.
+  - `<html lang>` is set by an inline script from the cookie, so the shell stays static under Cache Components.
+  - `npm run db:seed`: the demo School "Dugsiga Horseed" (Hodan and Wadajir Branches) with invitations for +252610000001 (School administrator), +252610000002 (teacher), and +252610000003 (accountant).
+  - Next.js upgraded from 16.4.3 to 16.4.6 for seven published advisories. The remaining `npm audit` items are in Prisma's CLI config loader (`effect`), and npm's only suggested fix is a downgrade to Prisma 6, so they're left as they are.
+- **Somali translations need review by a native speaker** before launch.
+
 ### Next action
 
-Step 2b: Somali/English message catalogues and a locale helper that reads `preferredLocale` (ADR 0008); a sign-in page (phone or email, then code); a session helper for server code (`getCurrentIdentity`); sign-out. Then 2c: Platform Super Administrator bootstrap script (email, password, enrol two-factor).
+Step 2c: a Platform Super Administrator bootstrap script (email, password), a two-factor enrolment screen, and a check that the platform area requires two-factor. Then step 3, Platform admin.
 
 ## Steps
 
 | # | Step | Contents | Status |
 |---|---|---|---|
 | 1 | Foundation | Schema core, RLS migration, `forSchool`/`platformDb`, isolation tests | Done |
-| 2 | Sign-in | Better Auth: phone OTP + email, Platform admin email + 2FA, invitations, `CodeSender` interface (console sender in dev), rate limits; `preferredLocale`; `so`/`en` message catalogues; locale from preference, not URL (ADR 0007, 0008) | 2a done; 2b (locale and UI) and 2c (admin bootstrap) next |
+| 2 | Sign-in | Better Auth: phone OTP + email, Platform admin email + 2FA, invitations, `CodeSender` interface (console sender in dev), rate limits; `preferredLocale`; `so`/`en` message catalogues; locale from preference, not URL (ADR 0007, 0008) | 2a and 2b done; 2c (admin bootstrap) next |
 | 3 | Platform admin | Create School (School + first Branch + admin invitation in one transaction), suspend and reactivate, archive; status checked on every request | |
 | 4 | Academic structure | Academic years, terms, class levels (`levelOrder`), sections, subjects (bilingual names), staff profiles, teacher assignments (`TEACHER`-only composite FK), school calendar | |
 | 5 | Students | Somali name parts, admission numbers, guardians + links + guardian match, enrollment, Branch transfer (zero-balance rule) | |
