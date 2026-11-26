@@ -34,16 +34,22 @@ Release 1 is built as one vertical slice at a time. Each step ends with passing 
   - Next.js upgraded from 16.4.3 to 16.4.6 for seven published advisories. The remaining `npm audit` items are in Prisma's CLI config loader (`effect`), and npm's only suggested fix is a downgrade to Prisma 6, so they're left as they are.
 - **Somali translations need review by a native speaker** before launch.
 
+- **Step 2c (Platform Super Administrators) is done**, with 43 tests passing and an HTTP smoke test against the production build:
+  - `npm run platform:admin -- --email … --name "…"` creates an administrator with a generated password, shown once.
+  - `/platform/sign-in` (email and password, then the authenticator code), `/platform/two-factor` (setup key, an otpauth link, 10 backup codes), and `/platform`, guarded by `requirePlatformAdmin()`.
+  - Gap closed: code-based sign-in bypasses Better Auth's two-factor, so platform admins never get codes and code sessions are refused for them.
+  - Not done yet: a QR code on the setup screen. Today it shows the setup key and an otpauth link.
+
 ### Next action
 
-Step 2c: a Platform Super Administrator bootstrap script (email, password), a two-factor enrolment screen, and a check that the platform area requires two-factor. Then step 3, Platform admin.
+Step 3 (Platform admin): create a School (School, first Branch, and the first School Administrator's invitation in one transaction), list Schools, suspend, reactivate, and archive, with School status checked on every request; a per-School invitation limit; and a platform audit log for these actions. Decide the audit log contents with the user first.
 
 ## Steps
 
 | # | Step | Contents | Status |
 |---|---|---|---|
 | 1 | Foundation | Schema core, RLS migration, `forSchool`/`platformDb`, isolation tests | Done |
-| 2 | Sign-in | Better Auth: phone OTP + email, Platform admin email + 2FA, invitations, `CodeSender` interface (console sender in dev), rate limits; `preferredLocale`; `so`/`en` message catalogues; locale from preference, not URL (ADR 0007, 0008) | 2a and 2b done; 2c (admin bootstrap) next |
+| 2 | Sign-in | Better Auth: phone OTP + email, Platform admin email + 2FA, invitations, `CodeSender` interface (console sender in dev), rate limits; `preferredLocale`; `so`/`en` message catalogues; locale from preference, not URL (ADR 0007, 0008) | Done |
 | 3 | Platform admin | Create School (School + first Branch + admin invitation in one transaction), suspend and reactivate, archive; status checked on every request | |
 | 4 | Academic structure | Academic years, terms, class levels (`levelOrder`), sections, subjects (bilingual names), staff profiles, teacher assignments (`TEACHER`-only composite FK), school calendar | |
 | 5 | Students | Somali name parts, admission numbers, guardians + links + guardian match, enrollment, Branch transfer (zero-balance rule) | |

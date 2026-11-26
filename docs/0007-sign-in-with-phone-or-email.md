@@ -22,3 +22,5 @@ Many school staff in Somalia use a phone number every day but rarely check email
 - SMS costs money per message. Codes are limited per destination (5 an hour, `code_send_log`) and per IP (Better Auth rate limits stored in the database). A per-School limit on invitations is still to do, in build plan step 3.
 - Not decided yet: the SMS provider. Codes are delivered through the `CodeSender` interface. Development prints them to the terminal, and production refuses to start without a real provider.
 - Amended 2026-11-25: email sign-in uses a code rather than a link, and staff sign-up is invitation-only.
+- Better Auth's two-factor plugin only guards password sign-in. Sign-in with a one-time code by email or phone skips it. So codes are never sent to a Platform Super Administrator's email or phone, and a session hook refuses a code-based session for one (`server/platform/admins.ts`). Tests cover both.
+- Platform Super Administrators are created only by `npm run platform:admin` (a generated password, shown once). The platform area requires two-factor to be set up (`server/platform/guard.ts`) and answers 404 to anyone else.

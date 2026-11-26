@@ -3,6 +3,7 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { emailOTP, phoneNumber, twoFactor } from "better-auth/plugins";
+import { refusesCodeSession } from "@/server/platform/admins";
 import { platformDb } from "@/server/platform/db";
 import { acceptPendingInvitations, hasPendingInvitation } from "@/server/platform/invitations";
 import { sendSignInCode } from "./codes";
@@ -54,6 +55,11 @@ export const auth = betterAuth({
     },
     session: {
       create: {
+        // Backstop for the code gate in codes.ts: no code-based session for a
+        // platform administrator, whatever else goes wrong.
+        before: async (session, ctx) => {
+          if (await refusesCodeSession(session.userId, ctx?.path)) return false;
+        },
         after: async (session) => {
           await acceptPendingInvitations(session.userId);
         },

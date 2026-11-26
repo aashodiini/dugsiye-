@@ -1,5 +1,6 @@
 import "server-only";
 import { APIError } from "better-auth/api";
+import { isPlatformAdminContact } from "@/server/platform/admins";
 import { platformDb } from "@/server/platform/db";
 import { isKnownContact, type Contact } from "@/server/platform/invitations";
 import { emailSender, smsSender } from "./senders";
@@ -15,6 +16,8 @@ const MAX_PER_HOUR = 5;
 
 export async function sendSignInCode(contact: Contact, code: string): Promise<void> {
   if (!(await isKnownContact(contact))) return;
+  // Platform administrators sign in with password and two-factor only.
+  if (await isPlatformAdminContact(contact)) return;
 
   const channel = "phoneNumber" in contact ? "SMS" : "EMAIL";
   const destination = "phoneNumber" in contact ? contact.phoneNumber : contact.email;

@@ -13,7 +13,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "postinstall": "prisma generate",
-    "db:seed": "tsx --conditions=react-server scripts/dev-seed.ts"
+    "db:seed": "tsx --conditions=react-server scripts/dev-seed.ts",
+    "platform:admin": "tsx --conditions=react-server scripts/create-platform-admin.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
